@@ -1,0 +1,1474 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Controle de Compras com Fornecedores</title>
+
+    <!-- 🔥 Firebase SDK (compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; background: #fff; border-radius: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); padding: 30px; }
+        h1 { color: #333; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .form-section { background: #f8f9fa; padding: 25px; border-radius: 15px; margin-bottom: 30px; }
+        .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 15px; }
+        .form-group { display: flex; flex-direction: column; }
+        .form-group label { font-weight: 600; color: #555; margin-bottom: 5px; font-size: 14px; }
+        .form-group input, .form-group select { padding: 10px; border: 2px solid #ddd; border-radius: 10px; font-size: 14px; transition: border-color 0.3s; font-family: inherit; }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: #667eea; }
+        .form-group input#datasVencimento { font-family: 'Courier New', monospace; font-size: 16px; letter-spacing: 0.5px; font-weight: 600; }
+        .form-group .hint { font-size: 12px; color: #888; margin-top: 4px; }
+        .btn { padding: 12px 30px; background: #667eea; color: #fff; border: none; border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.3s; }
+        .btn:hover { background: #5a6fd6; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102,126,234,0.4); }
+        .btn-danger { background: #e74c3c; }
+        .btn-danger:hover { background: #c0392b; }
+        .btn-success { background: #2ecc71; }
+        .btn-success:hover { background: #27ae60; }
+        .btn-warning { background: #f39c12; }
+        .btn-warning:hover { background: #d68910; }
+        .btn-purple { background: #9b59b6; }
+        .btn-purple:hover { background: #8e44ad; }
+        .btn-info { background: #3498db; }
+        .btn-info:hover { background: #2980b9; }
+        .btn-sm { padding: 8px 16px; font-size: 12px; }
+        .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+        .calendar-nav { display: flex; gap: 10px; align-items: center; }
+        .calendar-nav button { padding: 8px 15px; background: #667eea; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
+        .month-year { font-size: 24px; font-weight: 700; color: #333; min-width: 200px; text-align: center; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; background: #e0e0e0; border-radius: 10px; overflow: hidden; }
+        .calendar-day-header { background: #667eea; color: #fff; padding: 12px; text-align: center; font-weight: 600; font-size: 14px; }
+        .calendar-day { background: #fff; min-height: 100px; padding: 8px; position: relative; cursor: pointer; transition: 0.2s; }
+        .calendar-day:hover { background: #f0f4ff; }
+        .calendar-day.other-month { background: #f8f9fa; color: #aaa; }
+        .calendar-day .day-number { font-weight: 700; font-size: 16px; margin-bottom: 5px; }
+        .calendar-day .add-payment-btn { position: absolute; bottom: 4px; right: 4px; background: #2ecc71; color: #fff; border: none; border-radius: 50%; width: 22px; height: 22px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0; transition: 0.3s; }
+        .calendar-day:hover .add-payment-btn { opacity: 1; }
+        .payment-item { background: #667eea; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 11px; margin-top: 2px; display: flex; justify-content: space-between; align-items: center; }
+        .payment-item .delete-payment { cursor: pointer; font-weight: bold; margin-left: 5px; font-size: 12px; }
+        .payment-item .delete-payment:hover { color: #ff6b6b; }
+        .payment-item .payment-desc { font-size: 10px; opacity: 0.8; flex: 1; margin: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .payment-item.manual { background: #9b59b6; }
+        .payment-item.boleto { background: #1a8c8c; }
+        .payment-item .edit-payment { cursor: pointer; margin-left: 3px; font-size: 11px; }
+        .payment-item .edit-payment:hover { color: #ffd93d; }
+        .ver-mais-btn { background: #667eea; color: #fff; border: none; border-radius: 4px; padding: 2px 8px; font-size: 10px; cursor: pointer; margin-top: 2px; width: 100%; text-align: center; }
+        .ver-mais-btn:hover { background: #5a6fd6; }
+        .month-total { background: #2ecc71; color: #fff; padding: 12px 20px; border-radius: 10px; text-align: center; font-weight: 700; font-size: 18px; margin-top: 20px; }
+
+        .payments-list { margin-top: 30px; }
+        .payments-list h3 { color: #333; margin-bottom: 15px; }
+        .payment-card { background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; transition: 0.3s; flex-wrap: wrap; gap: 10px; }
+        .payment-card:hover { background: #e9ecef; transform: translateX(5px); }
+        .payment-card.boleto-payment { border-left: 4px solid #1a8c8c; }
+        .payment-card.manual-payment { border-left: 4px solid #9b59b6; }
+        .payment-info { display: flex; gap: 20px; flex-wrap: wrap; flex: 1; }
+        .payment-info span { font-size: 14px; }
+        .payment-info .label { font-weight: 600; color: #555; }
+        .payment-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        .payment-actions button { padding: 5px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; }
+        .badge { padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+        .badge-pending { background: #f39c12; color: #fff; }
+        .badge-paid { background: #2ecc71; color: #fff; }
+        .badge-overdue { background: #e74c3c; color: #fff; }
+        .badge-manual { background: #9b59b6; color: #fff; }
+        .badge-boleto { background: #1a8c8c; color: #fff; }
+
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal.active { display: flex; }
+        .modal-content { background: #fff; padding: 30px; border-radius: 20px; max-width: 550px; width: 90%; max-height: 80vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .modal-header h2 { color: #333; }
+        .close-modal { cursor: pointer; font-size: 28px; color: #999; transition: 0.3s; }
+        .close-modal:hover { color: #333; }
+
+        .status-filter { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .status-filter button { padding: 8px 16px; border: 2px solid #ddd; background: #fff; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.3s; }
+        .status-filter button:hover { border-color: #667eea; }
+        .status-filter button.active { background: #667eea; color: #fff; border-color: #667eea; }
+
+        .info-box { background: #e8f0fe; border-left: 4px solid #667eea; padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; }
+        .info-box p { color: #555; font-size: 14px; }
+        .info-box code { background: #fff; padding: 1px 6px; border-radius: 4px; font-family: 'Courier New', monospace; font-weight: 700; color: #667eea; }
+
+        .modal-form-group { margin-bottom: 15px; }
+        .modal-form-group label { display: block; font-weight: 600; color: #555; margin-bottom: 5px; font-size: 14px; }
+        .modal-form-group input, .modal-form-group select { width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 10px; font-size: 14px; }
+        .modal-form-group input:focus, .modal-form-group select:focus { outline: none; border-color: #667eea; }
+        .modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; flex-wrap: wrap; }
+
+        .pagination-controls { display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 15px; }
+        .pagination-controls button { padding: 8px 20px; border: 2px solid #667eea; background: #fff; color: #667eea; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.3s; }
+        .pagination-controls button:hover:not(:disabled) { background: #667eea; color: #fff; }
+        .pagination-controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .pagination-controls span { font-weight: 600; color: #555; }
+
+        .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 30px 0; }
+        .dashboard-card { background: #f8f9fa; border-radius: 15px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .dashboard-card h3 { color: #333; margin-bottom: 15px; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; }
+        .dashboard-card .rank-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #eee; font-size: 14px; }
+        .dashboard-card .rank-item .pos { font-weight: 700; color: #667eea; margin-right: 10px; }
+        .dashboard-card .rank-item .name { flex: 1; }
+        .dashboard-card .rank-item .value { font-weight: 600; color: #333; }
+        .chart-container { position: relative; height: 250px; margin-top: 10px; }
+
+        .fornecedor-badge { background: #667eea; color: #fff; border-radius: 12px; padding: 2px 10px; font-size: 10px; display: inline-block; }
+
+        .card-full { grid-column: 1 / -1; }
+
+        .tabela-mensal { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; }
+        .tabela-mensal th { background: #667eea; color: #fff; padding: 8px 12px; text-align: left; }
+        .tabela-mensal td { padding: 6px 12px; border-bottom: 1px solid #e0e0e0; }
+        .tabela-mensal tr:hover td { background: #f0f4ff; }
+        .tabela-mensal .mes { font-weight: 700; background: #eef2f7; }
+        .tabela-mensal .qtd { text-align: center; font-weight: 600; }
+        .scroll-table { max-height: 300px; overflow-y: auto; }
+
+        .filtros-pagamento { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 15px; background: #f8f9fa; padding: 15px; border-radius: 10px; }
+        .filtros-pagamento .form-group { min-width: 150px; flex: 0 0 auto; }
+        .filtros-pagamento .form-group label { font-size: 13px; }
+        .filtros-pagamento .btn { padding: 8px 16px; font-size: 12px; }
+
+        .historico-section { margin-top: 40px; border-top: 3px solid #667eea; padding-top: 30px; }
+        .historico-section h2 { color: #333; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+        .historico-filtros { display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 20px; background: #f8f9fa; padding: 15px; border-radius: 10px; }
+        .historico-filtros .form-group { min-width: 150px; flex: 0 0 auto; }
+        .historico-filtros .form-group label { font-size: 13px; }
+        .historico-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .historico-stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 4px 15px rgba(102,126,234,0.3); }
+        .historico-stat-card.verde { background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); box-shadow: 0 4px 15px rgba(46,204,113,0.3); }
+        .historico-stat-card.vermelho { background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); box-shadow: 0 4px 15px rgba(231,76,60,0.3); }
+        .historico-stat-card.laranja { background: linear-gradient(135deg, #f39c12 0%, #d68910 100%); box-shadow: 0 4px 15px rgba(243,156,18,0.3); }
+        .historico-stat-card.roxo { background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); box-shadow: 0 4px 15px rgba(155,89,182,0.3); }
+        .historico-stat-card .numero { font-size: 28px; font-weight: 800; display: block; }
+        .historico-stat-card .rotulo { font-size: 12px; opacity: 0.9; margin-top: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .historico-timeline { position: relative; padding-left: 30px; }
+        .historico-timeline::before { content: ''; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #e0e0e0; }
+        .historico-item { position: relative; background: #fff; border: 1px solid #e0e0e0; border-radius: 12px; padding: 15px 18px; margin-bottom: 15px; transition: all 0.3s; }
+        .historico-item:hover { box-shadow: 0 4px 15px rgba(0,0,0,0.1); transform: translateX(5px); }
+        .historico-item::before { content: ''; position: absolute; left: -25px; top: 20px; width: 14px; height: 14px; border-radius: 50%; background: #667eea; border: 3px solid #fff; box-shadow: 0 0 0 2px #667eea; }
+        .historico-item.acao-criar::before { background: #2ecc71; box-shadow: 0 0 0 2px #2ecc71; }
+        .historico-item.acao-editar::before { background: #f39c12; box-shadow: 0 0 0 2px #f39c12; }
+        .historico-item.acao-excluir::before { background: #e74c3c; box-shadow: 0 0 0 2px #e74c3c; }
+        .historico-item.acao-pagar::before { background: #3498db; box-shadow: 0 0 0 2px #3498db; }
+        .historico-item.acao-fornecedor::before { background: #9b59b6; box-shadow: 0 0 0 2px #9b59b6; }
+        .historico-item .hist-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px; }
+        .historico-item .hist-acao { font-weight: 700; font-size: 14px; padding: 3px 12px; border-radius: 20px; color: #fff; }
+        .historico-item .hist-acao.criar { background: #2ecc71; }
+        .historico-item .hist-acao.editar { background: #f39c12; }
+        .historico-item .hist-acao.excluir { background: #e74c3c; }
+        .historico-item .hist-acao.pagar { background: #3498db; }
+        .historico-item .hist-acao.fornecedor { background: #9b59b6; }
+        .historico-item .hist-data { font-size: 12px; color: #999; font-weight: 600; }
+        .historico-item .hist-descricao { font-size: 14px; color: #333; margin-bottom: 5px; }
+        .historico-item .hist-detalhes { font-size: 12px; color: #777; background: #f8f9fa; padding: 8px 12px; border-radius: 8px; margin-top: 8px; }
+        .historico-item .hist-detalhes strong { color: #555; }
+
+        .historico-paginacao { display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 20px; }
+        .historico-paginacao button { padding: 8px 20px; border: 2px solid #667eea; background: #fff; color: #667eea; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.3s; }
+        .historico-paginacao button:hover:not(:disabled) { background: #667eea; color: #fff; }
+        .historico-paginacao button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .historico-paginacao span { font-weight: 600; color: #555; }
+
+        .datas-preview { margin-top: 6px; font-size: 12px; padding: 8px 12px; border-radius: 8px; line-height: 1.7; display: none; }
+        .datas-preview.ativa { display: block; }
+        .datas-preview.ok { background: #e8f8f0; border-left: 3px solid #2ecc71; color: #1e8449; }
+        .datas-preview.erro { background: #fdedec; border-left: 3px solid #e74c3c; color: #922b21; }
+        .datas-preview .data-chip { display: inline-block; background: #2ecc71; color: #fff; padding: 2px 8px; border-radius: 12px; margin: 2px 3px 2px 0; font-weight: 600; font-family: 'Courier New', monospace; }
+        .datas-preview.erro .data-chip { background: #e74c3c; }
+
+        .sync-status { position: fixed; top: 20px; right: 20px; padding: 10px 20px; border-radius: 20px; font-weight: 600; font-size: 13px; z-index: 9999; box-shadow: 0 4px 15px rgba(0,0,0,0.2); transition: all 0.3s; display: flex; align-items: center; gap: 8px; }
+        .sync-status.syncing { background: #f39c12; color: #fff; }
+        .sync-status.synced { background: #2ecc71; color: #fff; }
+        .sync-status.error { background: #e74c3c; color: #fff; }
+        .sync-status.offline { background: #95a5a6; color: #fff; }
+
+        @media (max-width: 768px) {
+            .container { padding: 15px; }
+            .calendar-day { min-height: 80px; padding: 4px; }
+            .calendar-day .day-number { font-size: 14px; }
+            .payment-item { font-size: 9px; padding: 1px 4px; }
+            .month-year { font-size: 18px; min-width: 150px; }
+            .form-row { grid-template-columns: 1fr; }
+            .payment-info { gap: 10px; }
+            .dashboard-grid { grid-template-columns: 1fr; }
+            .card-full { grid-column: 1; }
+            .calendar-day .add-payment-btn { opacity: 0.5; width: 18px; height: 18px; font-size: 12px; }
+            .filtros-pagamento { flex-direction: column; align-items: stretch; }
+            .filtros-pagamento .form-group { min-width: 100%; }
+            .historico-filtros { flex-direction: column; align-items: stretch; }
+            .historico-filtros .form-group { min-width: 100%; }
+            .historico-timeline { padding-left: 20px; }
+            .sync-status { top: 10px; right: 10px; padding: 8px 14px; font-size: 11px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="sync-status syncing" id="syncStatus">
+    <span>⏳</span> <span id="syncText">Carregando...</span>
+</div>
+
+<div class="container">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
+        <h1>📅 Controle de Compras</h1>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn btn-warning" onclick="abrirModalFornecedor()">🏢 Gerenciar Fornecedores</button>
+            <button class="btn btn-danger" onclick="limparTodosDados()">🗑️ Limpar Dados</button>
+        </div>
+    </div>
+
+    <div class="form-section">
+        <h3>Nova Compra com Datas de Vencimento</h3>
+        <div class="info-box">
+            <p>💡 <strong>Digite apenas os números e as barras aparecem automaticamente!</strong></p>
+            <p style="font-size:13px; color:#666; margin-top:4px;">
+                Cada data = <code>ddmmaa</code>. Continue digitando para adicionar mais datas — elas se separam sozinhas com um espaço.<br>
+                Ex: <code>150126200226</code> → <strong>15/01/26 20/02/26</strong> &nbsp;•&nbsp; O ano <code>26</code> vira <strong>2026</strong> automaticamente.
+            </p>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="descricao">Descrição</label>
+                <input type="text" id="descricao" placeholder="Ex: Notebook">
+            </div>
+            <div class="form-group">
+                <label for="valor">Valor Total (R$)</label>
+                <input type="number" id="valor" step="0.01" placeholder="0,00">
+            </div>
+            <div class="form-group">
+                <label for="dataCompra">Data da Compra (referência)</label>
+                <input type="date" id="dataCompra">
+                <span class="hint">Apenas para registro</span>
+            </div>
+            <div class="form-group" style="grid-column: span 2;">
+                <label for="datasVencimento">Datas de Vencimento</label>
+                <input type="text" id="datasVencimento" placeholder="150126200226" inputmode="numeric" autocomplete="off">
+                <span class="hint">Digite só os números — exemplo: <strong>150126</strong> (15/01/26)</span>
+                <div class="datas-preview" id="datasPreview"></div>
+            </div>
+            <div class="form-group">
+                <label for="fornecedorCompra">Fornecedor</label>
+                <select id="fornecedorCompra"><option value="">Selecione</option></select>
+            </div>
+        </div>
+        <button class="btn" onclick="adicionarCompra()">➕ Adicionar Compra</button>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="dashboard-card">
+            <h3>🏆 Ranking de Fornecedores (Quantidade Total de Pedidos)</h3>
+            <div id="rankPedidos"><p style="color:#999;">Nenhum dado</p></div>
+        </div>
+        <div class="dashboard-card">
+            <h3>💰 Ranking de Fornecedores (Valor Total Devido)</h3>
+            <div id="rankValor"><p style="color:#999;">Nenhum dado</p></div>
+        </div>
+        <div class="dashboard-card">
+            <h3>📊 Custo por Fornecedor (todos os períodos)</h3>
+            <div class="chart-container"><canvas id="chartFornecedor"></canvas></div>
+        </div>
+        <div class="dashboard-card">
+            <h3>📈 Custo por Mês (ano atual)</h3>
+            <div class="chart-container"><canvas id="chartMes"></canvas></div>
+        </div>
+        <div class="dashboard-card card-full">
+            <h3>📅 Lançamentos por Mês por Fornecedor</h3>
+            <div id="rankMensal" style="max-height: 350px; overflow-y: auto;">
+                <p style="color:#999;">Nenhum dado</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="calendar-header">
+        <div class="calendar-nav">
+            <button onclick="mudarMes(-1)">◀</button>
+            <span class="month-year" id="monthYear">Janeiro 2024</span>
+            <button onclick="mudarMes(1)">▶</button>
+        </div>
+        <button class="btn btn-success" onclick="hoje()">Hoje</button>
+    </div>
+    <div class="calendar-grid" id="calendarGrid"></div>
+    <div class="month-total" id="monthTotal">Total do Mês: R$ 0,00</div>
+
+    <div class="payments-list">
+        <h3>📋 Todos os Pagamentos</h3>
+        <div class="status-filter">
+            <button class="active" onclick="filtrarPagamentos('todos',event)">Todos</button>
+            <button onclick="filtrarPagamentos('pendente',event)">Pendentes</button>
+            <button onclick="filtrarPagamentos('pago',event)">Pagos</button>
+            <button onclick="filtrarPagamentos('vencido',event)">Vencidos</button>
+            <button onclick="filtrarPagamentos('boleto',event)">Boletos</button>
+            <button onclick="filtrarPagamentos('manual',event)">Manuais</button>
+        </div>
+        <div class="filtros-pagamento" id="filtrosAdicionais">
+            <div class="form-group">
+                <label for="filtroFornecedor">Fornecedor</label>
+                <select id="filtroFornecedor"><option value="">Todos</option></select>
+            </div>
+            <div class="form-group">
+                <label for="filtroDataInicio">Data Início</label>
+                <input type="date" id="filtroDataInicio">
+            </div>
+            <div class="form-group">
+                <label for="filtroDataFim">Data Fim</label>
+                <input type="date" id="filtroDataFim">
+            </div>
+            <button class="btn btn-info" onclick="aplicarFiltros()">🔍 Filtrar</button>
+            <button class="btn btn-sm btn-outline" onclick="limparFiltros()" style="background:#eee; border:1px solid #ccc; padding:8px 16px; border-radius:8px; cursor:pointer;">Limpar</button>
+        </div>
+        <div id="paymentsList"></div>
+        <div class="pagination-controls">
+            <button id="prevPageBtn" onclick="mudarPagina(-1)">◀ Anterior</button>
+            <span id="pageInfo">Página 1</span>
+            <button id="nextPageBtn" onclick="mudarPagina(1)">Próxima ▶</button>
+        </div>
+    </div>
+
+    <div class="historico-section">
+        <h2>📜 Histórico de Atividades de Lançamentos</h2>
+        <p style="color:#666; margin-bottom:20px; font-size:14px;">
+            Acompanhe todas as atividades realizadas no sistema.
+        </p>
+
+        <div class="historico-stats" id="historicoStats">
+            <div class="historico-stat-card verde"><span class="numero" id="statCriados">0</span><span class="rotulo">✅ Criados</span></div>
+            <div class="historico-stat-card laranja"><span class="numero" id="statEditados">0</span><span class="rotulo">✏️ Editados</span></div>
+            <div class="historico-stat-card vermelho"><span class="numero" id="statExcluidos">0</span><span class="rotulo">🗑️ Excluídos</span></div>
+            <div class="historico-stat-card"><span class="numero" id="statPagos">0</span><span class="rotulo">💰 Pagos</span></div>
+            <div class="historico-stat-card roxo"><span class="numero" id="statFornecedores">0</span><span class="rotulo">🏢 Fornecedores</span></div>
+        </div>
+
+        <div class="historico-filtros">
+            <div class="form-group">
+                <label for="histFiltroAcao">Tipo de Ação</label>
+                <select id="histFiltroAcao">
+                    <option value="">Todas</option>
+                    <option value="criar">✅ Criação</option>
+                    <option value="editar">✏️ Edição</option>
+                    <option value="excluir">🗑️ Exclusão</option>
+                    <option value="pagar">💰 Pagamento</option>
+                    <option value="fornecedor">🏢 Fornecedor</option>
+                </select>
+            </div>
+            <div class="form-group"><label for="histFiltroDataInicio">Data Início</label><input type="date" id="histFiltroDataInicio"></div>
+            <div class="form-group"><label for="histFiltroDataFim">Data Fim</label><input type="date" id="histFiltroDataFim"></div>
+            <div class="form-group"><label for="histFiltroBusca">Buscar</label><input type="text" id="histFiltroBusca" placeholder="Descrição, valor..."></div>
+            <button class="btn btn-info" onclick="aplicarFiltrosHistorico()">🔍 Filtrar</button>
+            <button class="btn" onclick="limparFiltrosHistorico()" style="background:#eee; border:1px solid #ccc; color:#555;">Limpar</button>
+            <button class="btn btn-danger" onclick="limparHistorico()">🗑️ Limpar Histórico</button>
+        </div>
+
+        <div id="historicoList" class="historico-timeline"></div>
+
+        <div class="historico-paginacao">
+            <button id="histPrevBtn" onclick="mudarPaginaHistorico(-1)">◀ Anterior</button>
+            <span id="histPageInfo">Página 1</span>
+            <button id="histNextBtn" onclick="mudarPaginaHistorico(1)">Próxima ▶</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="manualPaymentModal">
+    <div class="modal-content">
+        <div class="modal-header"><h2 id="manualModalTitle">📝 Lançamento</h2><span class="close-modal" onclick="fecharModalManual()">&times;</span></div>
+        <div class="modal-form-group"><label>Data</label><input type="date" id="manualData" readonly style="background:#f0f0f0;"></div>
+        <div class="modal-form-group"><label>Descrição</label><input type="text" id="manualDescricao" placeholder="Ex: Pagamento"></div>
+        <div class="modal-form-group"><label>Valor (R$)</label><input type="number" id="manualValor" step="0.01"></div>
+        <div class="modal-form-group">
+            <label>Fornecedor</label>
+            <select id="manualFornecedor"><option value="">Nenhum</option></select>
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-danger" onclick="fecharModalManual()">Cancelar</button>
+            <button class="btn btn-success" id="manualSubmitBtn" onclick="salvarPagamentoManual()">✅ Adicionar</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="fornecedorModal">
+    <div class="modal-content">
+        <div class="modal-header"><h2>🏢 Gerenciar Fornecedores</h2><span class="close-modal" onclick="fecharModalFornecedor()">&times;</span></div>
+        <div class="form-row">
+            <div class="form-group" style="flex:3;">
+                <label>Novo Fornecedor</label>
+                <input type="text" id="novoFornecedor" placeholder="Nome do fornecedor">
+            </div>
+            <div class="form-group" style="flex:1; justify-content:flex-end;">
+                <button class="btn btn-success" onclick="adicionarFornecedor()" style="margin-top:23px;">➕ Adicionar</button>
+            </div>
+        </div>
+        <div id="listaFornecedores" style="margin-top:15px;"></div>
+        <div class="modal-actions">
+            <button class="btn btn-danger" onclick="fecharModalFornecedor()">Fechar</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="paymentModal">
+    <div class="modal-content">
+        <div class="modal-header"><h2>Detalhes</h2><span class="close-modal" onclick="fecharModal()">&times;</span></div>
+        <div id="modalBody"></div>
+    </div>
+</div>
+
+<script>
+// =========================== CONFIGURAÇÃO FIREBASE ===========================
+const firebaseConfig = {
+  apiKey: "AIzaSyBMwhh9WMisFeEeAQw3h5e1spV5SaWL6Xo",
+  authDomain: "controle-de-compras-bonfs.firebaseapp.com",
+  projectId: "controle-de-compras-bonfs",
+  storageBucket: "controle-de-compras-bonfs.firebasestorage.app",
+  messagingSenderId: "789500684026",
+  appId: "1:789500684026:web:c15ecb6b0452e3c4ab4b43"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const USUARIO_ID = 'principal';
+
+// =========================== BANCO DE DADOS ===========================
+let compras = [];
+let pagamentos = [];
+let fornecedores = [];
+let historico = [];
+let mesAtual = new Date().getMonth();
+let anoAtual = new Date().getFullYear();
+let filtroAtual = 'todos';
+let pagamentoEditando = null;
+let paginaAtual = 1;
+const ITENS_POR_PAGINA = 5;
+
+let paginaHistAtual = 1;
+const HIST_ITENS_POR_PAGINA = 10;
+let histFiltroAcao = '';
+let histFiltroDataInicio = '';
+let histFiltroDataFim = '';
+let histFiltroBusca = '';
+
+let filtroFornecedor = '';
+let filtroDataInicio = '';
+let filtroDataFim = '';
+
+let chartFornecedor = null;
+let chartMes = null;
+
+// =========================== MÁSCARA INTELIGENTE DE DATAS ===========================
+/**
+ * Formata uma sequência de dígitos como várias datas dd/mm/aa separadas por espaço.
+ * A cada 6 dígitos, completa uma data e começa outra.
+ * Ex: "150126200226" → "15/01/26 20/02/26"
+ */
+function formatarDatasInput(valor) {
+    const digitos = String(valor).replace(/\D/g, '');
+    if (digitos.length === 0) return '';
+
+    const partes = [];
+    for (let i = 0; i < digitos.length; i += 6) {
+        const grupo = digitos.slice(i, i + 6);
+        let str = grupo.slice(0, 2);
+        if (grupo.length > 2) str += '/' + grupo.slice(2, 4);
+        if (grupo.length > 4) str += '/' + grupo.slice(4, 6);
+        partes.push(str);
+    }
+    return partes.join(' ');
+}
+
+/**
+ * Aplica a máscara no input preservando a posição do cursor (baseada em dígitos).
+ */
+function aplicarMascaraDatas(input) {
+    const posAntes = input.selectionStart;
+    const textoAntes = input.value.slice(0, posAntes);
+    const digitosAntes = (textoAntes.match(/\d/g) || []).length;
+
+    const formatado = formatarDatasInput(input.value);
+
+    if (input.value !== formatado) {
+        input.value = formatado;
+
+        // Reposiciona cursor baseado na contagem de dígitos
+        let novaPos = formatado.length;
+        let contador = 0;
+        for (let i = 0; i < formatado.length; i++) {
+            if (contador === digitosAntes) { novaPos = i; break; }
+            if (/\d/.test(formatado[i])) contador++;
+        }
+        try { input.setSelectionRange(novaPos, novaPos); } catch (e) {}
+    }
+}
+
+// =========================== PARSER DE DATA INDIVIDUAL ===========================
+function dataValida(dia, mes, ano) {
+    if (!dia || !mes || !ano) return false;
+    if (dia < 1 || dia > 31 || mes < 1 || mes > 12) return false;
+    if (ano < 2000 || ano > 2100) return false;
+    const d = new Date(ano, mes - 1, dia);
+    return d.getFullYear() === ano && d.getMonth() === mes - 1 && d.getDate() === dia;
+}
+
+/**
+ * Aceita "dd/mm/aa" ou "dd/mm/aaaa" (com barras, traços ou pontos).
+ * O ano de 2 dígitos vira 20xx.
+ */
+function parseDataFlexivel(input) {
+    const str = String(input).trim();
+    if (!str) return { ok: false, motivo: 'vazio' };
+
+    const partes = str.split(/[\/\-\.\s]+/).filter(s => s !== '');
+    if (partes.length !== 3) return { ok: false, motivo: 'formato inválido' };
+    if (!partes.every(p => /^\d+$/.test(p))) return { ok: false, motivo: 'contém caracteres inválidos' };
+
+    const dia = parseInt(partes[0], 10);
+    const mes = parseInt(partes[1], 10);
+    const anoStr = partes[2];
+    let ano;
+    if (anoStr.length === 2) ano = 2000 + parseInt(anoStr, 10);
+    else if (anoStr.length === 4) ano = parseInt(anoStr, 10);
+    else return { ok: false, motivo: 'ano deve ter 2 ou 4 dígitos' };
+
+    if (!dataValida(dia, mes, ano)) return { ok: false, motivo: 'data inválida' };
+
+    const iso = String(ano).padStart(4,'0') + '-' + String(mes).padStart(2,'0') + '-' + String(dia).padStart(2,'0');
+    const br = String(dia).padStart(2,'0') + '/' + String(mes).padStart(2,'0') + '/' + String(ano).padStart(4,'0');
+    return { ok: true, iso, br };
+}
+
+/**
+ * Divide a string em datas individuais (por espaço, vírgula ou ponto-e-vírgula).
+ */
+function dividirDatas(str) {
+    return String(str).split(/[\s,;]+/).map(s => s.trim()).filter(s => s !== '');
+}
+
+// =========================== PREVIEW EM TEMPO REAL ===========================
+function atualizarPreviewDatas() {
+    const input = document.getElementById('datasVencimento');
+    const preview = document.getElementById('datasPreview');
+    const valor = input.value.trim();
+
+    if (!valor) {
+        preview.className = 'datas-preview';
+        preview.innerHTML = '';
+        return;
+    }
+
+    const partes = dividirDatas(valor);
+    if (partes.length === 0) {
+        preview.className = 'datas-preview';
+        preview.innerHTML = '';
+        return;
+    }
+
+    const validas = [];
+    const invalidas = [];
+
+    partes.forEach(p => {
+        const res = parseDataFlexivel(p);
+        if (res.ok) validas.push(res.br);
+        else invalidas.push({ original: p, motivo: res.motivo });
+    });
+
+    if (invalidas.length === 0) {
+        preview.className = 'datas-preview ativa ok';
+        const chips = validas.map(d => `<span class="data-chip">${d}</span>`).join('');
+        const plural = validas.length === 1 ? 'data reconhecida' : 'datas reconhecidas';
+        preview.innerHTML = `✅ <strong>${validas.length} ${plural}:</strong><br>${chips}`;
+    } else {
+        preview.className = 'datas-preview ativa erro';
+        let html = '';
+        if (validas.length > 0) {
+            html += `✅ Reconhecidas: ${validas.map(d => `<span class="data-chip">${d}</span>`).join('')}<br>`;
+        }
+        html += `❌ Não reconhecidas: ${invalidas.map(i => `<span class="data-chip">${i.original}</span> <em>(${i.motivo})</em>`).join('<br>')}`;
+        preview.innerHTML = html;
+    }
+}
+
+// =========================== SINCRONIZAÇÃO ===========================
+let timeoutSalvar = null;
+let firebaseCarregado = false;
+
+function atualizarStatusSync(status, texto) {
+    const el = document.getElementById('syncStatus');
+    el.className = 'sync-status ' + status;
+    const icons = { syncing: '⏳', synced: '☁️', error: '❌', offline: '📴' };
+    el.querySelector('span').textContent = icons[status] || '';
+    document.getElementById('syncText').textContent = texto;
+
+    if (status === 'synced') {
+        setTimeout(() => {
+            if (el.classList.contains('synced')) {
+                el.style.opacity = '0';
+                setTimeout(() => el.style.display = 'none', 500);
+            }
+        }, 2500);
+    } else {
+        el.style.display = 'flex';
+        el.style.opacity = '1';
+    }
+}
+
+async function carregarDadosFirebase() {
+    atualizarStatusSync('syncing', 'Carregando...');
+    try {
+        const docRef = db.collection('sistemas').doc(USUARIO_ID);
+        const docSnap = await docRef.get();
+
+        if (docSnap.exists) {
+            const dados = docSnap.data();
+            compras = dados.compras || [];
+            pagamentos = dados.pagamentos || [];
+            fornecedores = dados.fornecedores || [];
+            historico = dados.historico || [];
+            console.log('✅ Dados carregados do Firebase');
+            atualizarStatusSync('synced', 'Dados carregados');
+        } else {
+            const cLocal = JSON.parse(localStorage.getItem('compras')) || [];
+            const pLocal = JSON.parse(localStorage.getItem('pagamentos')) || [];
+            const fLocal = JSON.parse(localStorage.getItem('fornecedores')) || [];
+            const hLocal = JSON.parse(localStorage.getItem('historico')) || [];
+
+            if (cLocal.length > 0 || pLocal.length > 0 || fLocal.length > 0) {
+                compras = cLocal;
+                pagamentos = pLocal;
+                fornecedores = fLocal;
+                historico = hLocal;
+                await salvarNoFirebase();
+                atualizarStatusSync('synced', 'Migrado para a nuvem');
+            } else {
+                fornecedores = [
+                    { id: 1, nome: 'Fornecedor A' },
+                    { id: 2, nome: 'Fornecedor B' },
+                    { id: 3, nome: 'Fornecedor C' }
+                ];
+                await salvarNoFirebase();
+                atualizarStatusSync('synced', 'Inicializado');
+            }
+        }
+        firebaseCarregado = true;
+    } catch (e) {
+        console.error('❌ Erro ao carregar do Firebase:', e);
+        atualizarStatusSync('error', 'Erro de conexão');
+        compras = JSON.parse(localStorage.getItem('compras')) || [];
+        pagamentos = JSON.parse(localStorage.getItem('pagamentos')) || [];
+        fornecedores = JSON.parse(localStorage.getItem('fornecedores')) || [];
+        historico = JSON.parse(localStorage.getItem('historico')) || [];
+    }
+}
+
+async function salvarNoFirebase() {
+    try {
+        const docRef = db.collection('sistemas').doc(USUARIO_ID);
+        await docRef.set({
+            compras, pagamentos, fornecedores, historico,
+            ultimaAtualizacao: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        console.log('☁️ Dados salvos no Firebase');
+        atualizarStatusSync('synced', 'Salvo na nuvem');
+    } catch (e) {
+        console.error('❌ Erro ao salvar no Firebase:', e);
+        atualizarStatusSync('error', 'Erro ao salvar');
+    }
+}
+
+function salvarDados() {
+    localStorage.setItem('compras', JSON.stringify(compras));
+    localStorage.setItem('pagamentos', JSON.stringify(pagamentos));
+    localStorage.setItem('fornecedores', JSON.stringify(fornecedores));
+    localStorage.setItem('historico', JSON.stringify(historico));
+
+    if (firebaseCarregado) {
+        atualizarStatusSync('syncing', 'Sincronizando...');
+        clearTimeout(timeoutSalvar);
+        timeoutSalvar = setTimeout(salvarNoFirebase, 800);
+    }
+}
+
+// =========================== HISTÓRICO ===========================
+function registrarHistorico(acao, descricao, detalhes = {}) {
+    const agora = new Date();
+    const registro = {
+        id: Date.now() + Math.random(),
+        acao, descricao, detalhes,
+        dataHora: agora.toISOString(),
+        data: agora.toLocaleDateString('pt-BR'),
+        hora: agora.toLocaleTimeString('pt-BR'),
+        timestamp: agora.getTime()
+    };
+    historico.unshift(registro);
+    if (historico.length > 1000) historico = historico.slice(0, 1000);
+    localStorage.setItem('historico', JSON.stringify(historico));
+}
+
+function renderizarHistorico() {
+    const container = document.getElementById('historicoList');
+    let filtrados = [...historico];
+    if (histFiltroAcao) filtrados = filtrados.filter(h => h.acao === histFiltroAcao);
+    if (histFiltroDataInicio) {
+        const inicio = new Date(histFiltroDataInicio + 'T00:00:00').getTime();
+        filtrados = filtrados.filter(h => h.timestamp >= inicio);
+    }
+    if (histFiltroDataFim) {
+        const fim = new Date(histFiltroDataFim + 'T23:59:59').getTime();
+        filtrados = filtrados.filter(h => h.timestamp <= fim);
+    }
+    if (histFiltroBusca) {
+        const busca = histFiltroBusca.toLowerCase();
+        filtrados = filtrados.filter(h => {
+            const texto = (h.descricao + ' ' + JSON.stringify(h.detalhes)).toLowerCase();
+            return texto.includes(busca);
+        });
+    }
+    const total = filtrados.length;
+    const paginas = Math.ceil(total / HIST_ITENS_POR_PAGINA) || 1;
+    if (paginaHistAtual > paginas) paginaHistAtual = paginas;
+    if (paginaHistAtual < 1) paginaHistAtual = 1;
+    const inicio = (paginaHistAtual - 1) * HIST_ITENS_POR_PAGINA;
+    const fim = Math.min(inicio + HIST_ITENS_POR_PAGINA, total);
+    const paginados = filtrados.slice(inicio, fim);
+    document.getElementById('histPrevBtn').disabled = paginaHistAtual <= 1;
+    document.getElementById('histNextBtn').disabled = paginaHistAtual >= paginas;
+    document.getElementById('histPageInfo').textContent = total > 0 ? `Página ${paginaHistAtual} de ${paginas} (${total} registros)` : 'Nenhum registro';
+    if (paginados.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:#999;padding:30px;">Nenhuma atividade registrada ainda.</p>';
+        return;
+    }
+    const acoesLabel = { 'criar': '✅ Criação', 'editar': '✏️ Edição', 'excluir': '🗑️ Exclusão', 'pagar': '💰 Pagamento', 'fornecedor': '🏢 Fornecedor' };
+    container.innerHTML = paginados.map(h => {
+        const acaoClass = h.acao;
+        const label = acoesLabel[h.acao] || h.acao;
+        let detalhesHtml = '';
+        if (h.detalhes && Object.keys(h.detalhes).length > 0) {
+            detalhesHtml = '<div class="hist-detalhes">' + Object.entries(h.detalhes).map(([k, v]) => `<div><strong>${k}:</strong> ${v}</div>`).join('') + '</div>';
+        }
+        return `<div class="historico-item acao-${acaoClass}">
+            <div class="hist-header">
+                <span class="hist-acao ${acaoClass}">${label}</span>
+                <span class="hist-data">📅 ${h.data} às ${h.hora}</span>
+            </div>
+            <div class="hist-descricao">${h.descricao}</div>
+            ${detalhesHtml}
+        </div>`;
+    }).join('');
+}
+
+function atualizarEstatisticasHistorico() {
+    document.getElementById('statCriados').textContent = historico.filter(h => h.acao === 'criar').length;
+    document.getElementById('statEditados').textContent = historico.filter(h => h.acao === 'editar').length;
+    document.getElementById('statExcluidos').textContent = historico.filter(h => h.acao === 'excluir').length;
+    document.getElementById('statPagos').textContent = historico.filter(h => h.acao === 'pagar').length;
+    document.getElementById('statFornecedores').textContent = historico.filter(h => h.acao === 'fornecedor').length;
+}
+
+function aplicarFiltrosHistorico() {
+    histFiltroAcao = document.getElementById('histFiltroAcao').value;
+    histFiltroDataInicio = document.getElementById('histFiltroDataInicio').value;
+    histFiltroDataFim = document.getElementById('histFiltroDataFim').value;
+    histFiltroBusca = document.getElementById('histFiltroBusca').value.trim();
+    paginaHistAtual = 1;
+    renderizarHistorico();
+}
+
+function limparFiltrosHistorico() {
+    document.getElementById('histFiltroAcao').value = '';
+    document.getElementById('histFiltroDataInicio').value = '';
+    document.getElementById('histFiltroDataFim').value = '';
+    document.getElementById('histFiltroBusca').value = '';
+    histFiltroAcao = histFiltroDataInicio = histFiltroDataFim = histFiltroBusca = '';
+    paginaHistAtual = 1;
+    renderizarHistorico();
+}
+
+function mudarPaginaHistorico(delta) { paginaHistAtual += delta; renderizarHistorico(); }
+
+function limparHistorico() {
+    if (historico.length === 0) { alert('O histórico já está vazio.'); return; }
+    if (confirm('Apagar TODO o histórico de atividades?')) {
+        historico = [];
+        salvarDados();
+        paginaHistAtual = 1;
+        renderizarHistorico();
+        atualizarEstatisticasHistorico();
+        alert('✅ Histórico limpo!');
+    }
+}
+
+// =========================== FORNECEDORES ===========================
+function carregarFornecedoresSelects() {
+    const selects = ['fornecedorCompra', 'manualFornecedor', 'filtroFornecedor'];
+    selects.forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const atual = sel.value;
+        if (id === 'filtroFornecedor') sel.innerHTML = '<option value="">Todos</option>';
+        else sel.innerHTML = '<option value="">Nenhum</option>';
+        fornecedores.forEach(f => {
+            const opt = document.createElement('option');
+            opt.value = f.id;
+            opt.textContent = f.nome;
+            sel.appendChild(opt);
+        });
+        if (fornecedores.some(f => f.id == atual)) sel.value = atual;
+    });
+}
+
+function abrirModalFornecedor() { document.getElementById('fornecedorModal').classList.add('active'); listarFornecedores(); }
+function fecharModalFornecedor() { document.getElementById('fornecedorModal').classList.remove('active'); }
+
+function adicionarFornecedor() {
+    const input = document.getElementById('novoFornecedor');
+    const nome = input.value.trim();
+    if (!nome) { alert('Digite o nome do fornecedor!'); return; }
+    if (fornecedores.some(f => f.nome.toLowerCase() === nome.toLowerCase())) { alert('Fornecedor já existe!'); return; }
+    const novoId = Date.now();
+    fornecedores.push({ id: novoId, nome });
+    salvarDados();
+    registrarHistorico('fornecedor', `Fornecedor "${nome}" adicionado`, { 'Fornecedor': nome, 'ID': novoId });
+    input.value = '';
+    listarFornecedores();
+    carregarFornecedoresSelects();
+    atualizarTudo();
+}
+
+function removerFornecedor(id) {
+    if (!confirm('Remover este fornecedor?')) return;
+    const usado = pagamentos.some(p => p.fornecedorId == id) || compras.some(c => c.fornecedorId == id);
+    if (usado) { alert('Este fornecedor está vinculado a lançamentos.'); return; }
+    const f = fornecedores.find(f => f.id === id);
+    const nome = f ? f.nome : 'Desconhecido';
+    fornecedores = fornecedores.filter(f => f.id !== id);
+    salvarDados();
+    registrarHistorico('fornecedor', `Fornecedor "${nome}" removido`, { 'Fornecedor': nome, 'ID': id });
+    listarFornecedores();
+    carregarFornecedoresSelects();
+    atualizarTudo();
+}
+
+function listarFornecedores() {
+    const div = document.getElementById('listaFornecedores');
+    if (fornecedores.length === 0) { div.innerHTML = '<p style="color:#999;">Nenhum fornecedor cadastrado.</p>'; return; }
+    div.innerHTML = fornecedores.map(f => `<div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #eee;"><span>${f.nome}</span><button class="btn btn-danger btn-sm" onclick="removerFornecedor(${f.id})">✕</button></div>`).join('');
+}
+
+// =========================== RANKINGS ===========================
+function calcularRankings() {
+    const rankPedidos = {};
+    compras.forEach(c => { if (c.fornecedorId) rankPedidos[c.fornecedorId] = (rankPedidos[c.fornecedorId] || 0) + 1; });
+    const rankValor = {};
+    pagamentos.forEach(p => { if (p.fornecedorId && p.status !== 'pago') rankValor[p.fornecedorId] = (rankValor[p.fornecedorId] || 0) + p.valor; });
+
+    const sortedPedidos = Object.entries(rankPedidos).sort((a,b) => b[1] - a[1]);
+    const sortedValor = Object.entries(rankValor).sort((a,b) => b[1] - a[1]);
+    const divPedidos = document.getElementById('rankPedidos');
+    const divValor = document.getElementById('rankValor');
+
+    if (sortedPedidos.length === 0) divPedidos.innerHTML = '<p style="color:#999;">Nenhum pedido registrado.</p>';
+    else divPedidos.innerHTML = sortedPedidos.map(([id, qtd], i) => {
+        const nome = fornecedores.find(f => f.id == id)?.nome || 'Desconhecido';
+        return `<div class="rank-item"><span><span class="pos">#${i+1}</span><span class="name">${nome}</span></span><span class="value">${qtd} ${qtd === 1 ? 'pedido' : 'pedidos'}</span></div>`;
+    }).join('');
+
+    if (sortedValor.length === 0) divValor.innerHTML = '<p style="color:#999;">Nenhum débito pendente.</p>';
+    else divValor.innerHTML = sortedValor.map(([id, valor], i) => {
+        const nome = fornecedores.find(f => f.id == id)?.nome || 'Desconhecido';
+        return `<div class="rank-item"><span><span class="pos">#${i+1}</span><span class="name">${nome}</span></span><span class="value">R$ ${valor.toFixed(2)}</span></div>`;
+    }).join('');
+
+    atualizarRankMensal();
+}
+
+function atualizarRankMensal() {
+    const container = document.getElementById('rankMensal');
+    const meses = {};
+    pagamentos.forEach(p => {
+        if (!p.fornecedorId) return;
+        const chave = p.dataVencimento.substring(0, 7);
+        if (!meses[chave]) meses[chave] = {};
+        if (!meses[chave][p.fornecedorId]) meses[chave][p.fornecedorId] = { qtd: 0, valor: 0 };
+        meses[chave][p.fornecedorId].qtd += 1;
+        meses[chave][p.fornecedorId].valor += p.valor;
+    });
+    const chaves = Object.keys(meses).sort((a, b) => b.localeCompare(a));
+    if (chaves.length === 0) { container.innerHTML = '<p style="color:#999;">Nenhum lançamento registrado.</p>'; return; }
+
+    let html = `<div class="scroll-table"><table class="tabela-mensal">
+        <thead><tr><th>Mês</th><th>Fornecedor</th><th style="text-align:center;">Lançamentos</th><th style="text-align:right;">Valor Lançado</th></tr></thead><tbody>`;
+
+    chaves.forEach(chave => {
+        const [ano, mes] = chave.split('-');
+        const mesesNome = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+        const label = `${mesesNome[parseInt(mes) - 1]}/${ano}`;
+        const fornecedoresMes = meses[chave];
+        const sorted = Object.entries(fornecedoresMes).sort((a, b) => b[1].qtd - a[1].qtd);
+        const totalMesQtd = sorted.reduce((acc, [, v]) => acc + v.qtd, 0);
+        const totalMesValor = sorted.reduce((acc, [, v]) => acc + v.valor, 0);
+
+        let first = true;
+        sorted.forEach(([id, dados]) => {
+            const nome = fornecedores.find(f => f.id == id)?.nome || 'Desconhecido';
+            html += `<tr>`;
+            if (first) { html += `<td class="mes" rowspan="${sorted.length + 1}">${label}</td>`; first = false; }
+            html += `<td>${nome}</td><td class="qtd">${dados.qtd}</td><td style="text-align:right; font-weight:600; color:#2ecc71;">R$ ${dados.valor.toFixed(2)}</td></tr>`;
+        });
+        html += `<tr style="background:#e8f0fe; font-weight:700;"><td style="color:#333;">📊 Total do Mês</td><td class="qtd" style="color:#667eea;">${totalMesQtd}</td><td style="text-align:right; color:#2ecc71;">R$ ${totalMesValor.toFixed(2)}</td></tr>`;
+    });
+    html += `</tbody></table></div>`;
+    container.innerHTML = html;
+}
+
+// =========================== GRÁFICOS ===========================
+function atualizarGraficos() {
+    const mapFornecedor = {};
+    pagamentos.forEach(p => { if (p.fornecedorId) mapFornecedor[p.fornecedorId] = (mapFornecedor[p.fornecedorId] || 0) + p.valor; });
+    const labels = [], values = [];
+    Object.entries(mapFornecedor).forEach(([id, total]) => {
+        const nome = fornecedores.find(f => f.id == id)?.nome || 'Desconhecido';
+        labels.push(nome);
+        values.push(total);
+    });
+    const ctx1 = document.getElementById('chartFornecedor').getContext('2d');
+    if (chartFornecedor) chartFornecedor.destroy();
+    chartFornecedor = new Chart(ctx1, {
+        type: 'doughnut',
+        data: { labels: labels.length ? labels : ['Sem dados'], datasets: [{ data: labels.length ? values : [1], backgroundColor: ['#667eea','#2ecc71','#e74c3c','#f39c12','#9b59b6','#3498db','#1abc9c','#e67e22','#e84393'], borderWidth: 1 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+    });
+
+    // 🔥 MESMO CRITÉRIO DO TOTAL DO MÊS: só pagamentos NÃO pagos do ano atual
+    const pagamentosAno = pagamentos.filter(p => {
+        if (p.status === 'pago') return false;
+        return parseInt(p.dataVencimento.split('-')[0]) === anoAtual;
+    });
+    const mapMes = {};
+    for (let m = 1; m <= 12; m++) mapMes[anoAtual + '-' + String(m).padStart(2,'0')] = 0;
+    pagamentosAno.forEach(p => { const mes = p.dataVencimento.substring(0,7); if (mapMes[mes] !== undefined) mapMes[mes] += p.valor; });
+    const mesesOrdenados = Object.keys(mapMes).sort();
+    const labelsMes = mesesOrdenados.map(m => { const meses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']; return meses[parseInt(m.split('-')[1])-1]; });
+    const valuesMes = mesesOrdenados.map(m => mapMes[m]);
+
+    const ctx2 = document.getElementById('chartMes').getContext('2d');
+    if (chartMes) chartMes.destroy();
+    chartMes = new Chart(ctx2, {
+        type: 'bar',
+        data: { labels: labelsMes, datasets: [{ label: 'Total (R$)', data: valuesMes, backgroundColor: valuesMes.map((v, i) => parseInt(mesesOrdenados[i].split('-')[1]) - 1 === mesAtual ? '#e74c3c' : '#667eea'), borderRadius: 4 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => 'R$ ' + ctx.parsed.y.toFixed(2) } } }, scales: { y: { beginAtZero: true, ticks: { callback: v => 'R$ ' + v.toFixed(2) } } } }
+    });
+}
+
+// =========================== ADICIONAR COMPRA ===========================
+function adicionarCompra() {
+    const descricao = document.getElementById('descricao').value.trim();
+    const valor = parseFloat(document.getElementById('valor').value);
+    const dataCompra = document.getElementById('dataCompra').value;
+    const datasInput = document.getElementById('datasVencimento').value.trim();
+    const fornecedorId = document.getElementById('fornecedorCompra').value;
+
+    if (!descricao || !valor || !dataCompra || !datasInput) { alert('Preencha todos os campos!'); return; }
+    if (valor <= 0) { alert('Valor deve ser maior que zero!'); return; }
+
+    const partes = dividirDatas(datasInput);
+    if (partes.length === 0) { alert('Informe pelo menos uma data de vencimento!'); return; }
+
+    const datasValidas = [];
+    const invalidas = [];
+    for (const parte of partes) {
+        const res = parseDataFlexivel(parte);
+        if (res.ok) datasValidas.push(res.iso);
+        else invalidas.push(`${parte} (${res.motivo})`);
+    }
+
+    if (invalidas.length > 0) {
+        alert(`Data(s) não reconhecida(s):\n\n${invalidas.join('\n')}\n\nDigite apenas os números: ddmmaa (ex: 150126).`);
+        return;
+    }
+
+    datasValidas.sort((a, b) => a.localeCompare(b));
+
+    const valorParcela = valor / datasValidas.length;
+    let total = 0;
+    const parcelas = datasValidas.map((data, index) => {
+        let v = parseFloat(valorParcela.toFixed(2));
+        if (index === datasValidas.length - 1) v = parseFloat((valor - total).toFixed(2));
+        total += v;
+        return { data, v };
+    });
+
+    const compra = { id: Date.now(), descricao, valor, dataCompra, datasVencimento: datasValidas, fornecedorId: fornecedorId || null, createdAt: new Date().toISOString() };
+    compras.push(compra);
+
+    parcelas.forEach((item, index) => {
+        pagamentos.push({
+            id: Date.now() + index, compraId: compra.id,
+            descricao: `${descricao} - ${index+1}/${parcelas.length}`,
+            valor: item.v, dataVencimento: item.data, dataPagamento: null,
+            status: 'pendente', parcela: index+1, totalParcelas: parcelas.length,
+            prazo: 0, tipo: 'compra', fornecedorId: fornecedorId || null
+        });
+    });
+
+    const fornecedorNome = fornecedorId ? (fornecedores.find(f => f.id == fornecedorId)?.nome || 'N/I') : 'Nenhum';
+    registrarHistorico('criar', `Compra "${descricao}" adicionada com ${parcelas.length} parcela(s)`, {
+        'Descrição': descricao, 'Valor Total': 'R$ ' + valor.toFixed(2),
+        'Fornecedor': fornecedorNome, 'Parcelas': parcelas.length,
+        'Vencimentos': datasValidas.map(d => formatarData(d)).join(', ')
+    });
+
+    salvarDados();
+    limparFormulario();
+    atualizarTudo();
+    alert(`✅ Compra adicionada! ${parcelas.length} parcela(s) criada(s).`);
+}
+
+// =========================== SALVAR PAGAMENTO MANUAL ===========================
+function salvarPagamentoManual() {
+    const descricao = document.getElementById('manualDescricao').value.trim();
+    const valor = parseFloat(document.getElementById('manualValor').value);
+    const data = document.getElementById('manualData').value;
+    const fornecedorId = document.getElementById('manualFornecedor').value;
+    if (!descricao || !valor || !data) { alert('Preencha todos!'); return; }
+    if (valor <= 0) { alert('Valor > 0'); return; }
+
+    const fornecedorNome = fornecedorId ? (fornecedores.find(f => f.id == fornecedorId)?.nome || 'N/I') : 'Nenhum';
+
+    if (pagamentoEditando) {
+        const p = pagamentos.find(p => p.id === pagamentoEditando);
+        if (p) {
+            const antes = { valor: p.valor };
+            p.descricao = descricao;
+            p.valor = parseFloat(valor.toFixed(2));
+            p.dataVencimento = data;
+            p.fornecedorId = fornecedorId || null;
+            registrarHistorico('editar', `Lançamento "${descricao}" editado`, {
+                'Descrição': descricao, 'Valor Anterior': 'R$ ' + antes.valor.toFixed(2),
+                'Valor Novo': 'R$ ' + valor.toFixed(2), 'Fornecedor': fornecedorNome, 'Vencimento': formatarData(data)
+            });
+        }
+    } else {
+        pagamentos.push({
+            id: Date.now(), compraId: null, descricao,
+            valor: parseFloat(valor.toFixed(2)), dataVencimento: data, dataPagamento: null,
+            status: 'pendente', parcela: 1, totalParcelas: 1, prazo: 0, tipo: 'manual', fornecedorId: fornecedorId || null
+        });
+        registrarHistorico('criar', `Lançamento manual "${descricao}" adicionado`, {
+            'Descrição': descricao, 'Valor': 'R$ ' + valor.toFixed(2),
+            'Fornecedor': fornecedorNome, 'Vencimento': formatarData(data), 'Tipo': 'Manual'
+        });
+    }
+    salvarDados();
+    fecharModalManual();
+    atualizarTudo();
+    alert('✅ Pagamento salvo!');
+}
+
+function abrirModalManual(dataStr) {
+    pagamentoEditando = null;
+    document.getElementById('manualModalTitle').textContent = '📝 Lançamento Manual';
+    document.getElementById('manualSubmitBtn').textContent = '✅ Adicionar';
+    document.getElementById('manualData').value = dataStr;
+    document.getElementById('manualDescricao').value = '';
+    document.getElementById('manualValor').value = '';
+    document.getElementById('manualFornecedor').value = '';
+    document.getElementById('manualPaymentModal').classList.add('active');
+    carregarFornecedoresSelects();
+    setTimeout(() => document.getElementById('manualDescricao').focus(), 100);
+}
+
+function editarPagamento(id) {
+    const p = pagamentos.find(p => p.id === id);
+    if (!p) return;
+    pagamentoEditando = id;
+    document.getElementById('manualModalTitle').textContent = '✏️ Editar Pagamento';
+    document.getElementById('manualSubmitBtn').textContent = '💾 Salvar';
+    document.getElementById('manualData').value = p.dataVencimento;
+    document.getElementById('manualDescricao').value = p.descricao;
+    document.getElementById('manualValor').value = p.valor;
+    document.getElementById('manualFornecedor').value = p.fornecedorId || '';
+    document.getElementById('manualPaymentModal').classList.add('active');
+    carregarFornecedoresSelects();
+}
+
+function fecharModalManual() {
+    document.getElementById('manualPaymentModal').classList.remove('active');
+    pagamentoEditando = null;
+}
+
+function marcarComoPago(id) {
+    const p = pagamentos.find(p => p.id === id);
+    if (p) {
+        p.status = 'pago';
+        p.dataPagamento = new Date().toISOString().split('T')[0];
+        const fornecedorNome = p.fornecedorId ? (fornecedores.find(f => f.id == p.fornecedorId)?.nome || 'N/I') : 'Nenhum';
+        registrarHistorico('pagar', `Pagamento "${p.descricao}" marcado como PAGO`, {
+            'Descrição': p.descricao, 'Valor': 'R$ ' + p.valor.toFixed(2),
+            'Fornecedor': fornecedorNome, 'Data Pagamento': new Date().toLocaleDateString('pt-BR'),
+            'Vencimento': formatarData(p.dataVencimento)
+        });
+        salvarDados();
+        atualizarTudo();
+    }
+}
+
+function excluirPagamento(id) {
+    if (!confirm('Excluir?')) return;
+    const p = pagamentos.find(p => p.id === id);
+    const compraId = p?.compraId;
+    if (p) {
+        const fornecedorNome = p.fornecedorId ? (fornecedores.find(f => f.id == p.fornecedorId)?.nome || 'N/I') : 'Nenhum';
+        registrarHistorico('excluir', `Lançamento "${p.descricao}" excluído`, {
+            'Descrição': p.descricao, 'Valor': 'R$ ' + p.valor.toFixed(2),
+            'Fornecedor': fornecedorNome, 'Vencimento': formatarData(p.dataVencimento),
+            'Status Anterior': p.status
+        });
+    }
+    pagamentos = pagamentos.filter(p => p.id !== id);
+    if (compraId && !pagamentos.some(p => p.compraId === compraId)) compras = compras.filter(c => c.id !== compraId);
+    salvarDados();
+    atualizarTudo();
+}
+
+function filtrarPagamentos(filtro, event) {
+    filtroAtual = filtro; paginaAtual = 1;
+    document.querySelectorAll('.status-filter button').forEach(b => b.classList.remove('active'));
+    if (event && event.target) event.target.classList.add('active');
+    atualizarListaPagamentos();
+}
+
+function mudarPagina(delta) { paginaAtual += delta; atualizarListaPagamentos(); }
+
+function formatarData(dataStr) {
+    const partes = dataStr.split('-');
+    const d = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]));
+    return d.toLocaleDateString('pt-BR');
+}
+
+function mudarMes(delta) {
+    mesAtual += delta;
+    if (mesAtual < 0) { mesAtual = 11; anoAtual--; }
+    else if (mesAtual > 11) { mesAtual = 0; anoAtual++; }
+    atualizarTudo();
+}
+
+function hoje() { const d = new Date(); mesAtual = d.getMonth(); anoAtual = d.getFullYear(); atualizarTudo(); }
+
+function limparFormulario() {
+    document.getElementById('descricao').value = '';
+    document.getElementById('valor').value = '';
+    document.getElementById('dataCompra').value = '';
+    document.getElementById('datasVencimento').value = '';
+    document.getElementById('fornecedorCompra').value = '';
+    document.getElementById('datasPreview').className = 'datas-preview';
+    document.getElementById('datasPreview').innerHTML = '';
+}
+
+function limparTodosDados() {
+    if (compras.length === 0 && pagamentos.length === 0 && fornecedores.length === 0) { alert('Não há dados.'); return; }
+    if (confirm('Apagar TODOS os dados (compras, pagamentos e fornecedores)?')) {
+        if (confirm('Última confirmação: todos os dados serão perdidos.')) {
+            registrarHistorico('excluir', 'TODOS os dados do sistema foram apagados', {
+                'Compras removidas': compras.length, 'Pagamentos removidos': pagamentos.length, 'Fornecedores removidos': fornecedores.length
+            });
+            compras = []; pagamentos = []; fornecedores = [];
+            salvarDados();
+            atualizarTudo();
+            carregarFornecedoresSelects();
+            alert('✅ Limpo!');
+        }
+    }
+}
+
+function atualizarStatusPagamentos() {
+    const hoje = new Date();
+    hoje.setHours(0,0,0,0);
+    let alterou = false;
+    pagamentos.forEach(p => {
+        if (p.status === 'pago') return;
+        const partes = p.dataVencimento.split('-');
+        const venc = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]));
+        venc.setHours(0,0,0,0);
+        if (venc < hoje && p.status !== 'vencido') { p.status = 'vencido'; alterou = true; }
+    });
+    if (alterou) salvarDados();
+}
+
+// =========================== CALENDÁRIO ===========================
+function renderizarCalendario() {
+    const grid = document.getElementById('calendarGrid');
+    grid.innerHTML = '';
+    const dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+    dias.forEach(d => { const h = document.createElement('div'); h.className='calendar-day-header'; h.textContent=d; grid.appendChild(h); });
+
+    const primeiro = new Date(anoAtual, mesAtual, 1);
+    const ultimo = new Date(anoAtual, mesAtual + 1, 0);
+    const inicioSemana = primeiro.getDay();
+    const diasMesAnt = new Date(anoAtual, mesAtual, 0).getDate();
+
+    for (let i = inicioSemana - 1; i >= 0; i--) {
+        const dia = diasMesAnt - i;
+        const data = new Date(anoAtual, mesAtual - 1, dia);
+        criarDia(grid, data.getFullYear() + '-' + String(data.getMonth() + 1).padStart(2, '0') + '-' + String(dia).padStart(2, '0'), true);
+    }
+    for (let dia = 1; dia <= ultimo.getDate(); dia++) {
+        criarDia(grid, anoAtual + '-' + String(mesAtual + 1).padStart(2, '0') + '-' + String(dia).padStart(2, '0'), false);
+    }
+    const total = inicioSemana + ultimo.getDate();
+    const rest = (7 - (total % 7)) % 7;
+    for (let dia = 1; dia <= rest; dia++) {
+        const data = new Date(anoAtual, mesAtual + 1, dia);
+        criarDia(grid, data.getFullYear() + '-' + String(data.getMonth() + 1).padStart(2, '0') + '-' + String(dia).padStart(2, '0'), true);
+    }
+    const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    document.getElementById('monthYear').textContent = `${meses[mesAtual]} ${anoAtual}`;
+    atualizarTotalMes();
+}
+
+function criarDia(grid, dataStr, outro) {
+    const div = document.createElement('div');
+    div.className = 'calendar-day';
+    if (outro) div.classList.add('other-month');
+    const dia = parseInt(dataStr.split('-')[2]);
+    const num = document.createElement('div');
+    num.className = 'day-number';
+    num.textContent = dia;
+    div.appendChild(num);
+
+    const pagDia = pagamentos.filter(p => p.dataVencimento === dataStr);
+    const max = 3;
+    const temMais = pagDia.length > max;
+    const exibir = temMais ? pagDia.slice(0, max) : pagDia;
+
+    exibir.forEach(p => {
+        const item = document.createElement('div');
+        item.className = 'payment-item';
+        if (p.tipo === 'manual') item.classList.add('manual');
+        if (p.tipo === 'boleto') item.classList.add('boleto');
+        const emoji = p.status === 'pago' ? '✅' : p.status === 'vencido' ? '⚠️' : '⏳';
+        const icon = p.tipo === 'boleto' ? '🏦' : p.tipo === 'manual' ? '📝' : '';
+        const fornecedorNome = p.fornecedorId ? (fornecedores.find(f => f.id == p.fornecedorId)?.nome || '') : '';
+        const badge = fornecedorNome ? `<span class="fornecedor-badge">${fornecedorNome.substring(0,10)}</span>` : '';
+        item.innerHTML = `<span>${emoji} ${icon} R$ ${p.valor.toFixed(2)}</span><span class="payment-desc">${p.descricao.substring(0,12)}</span><span>${badge}<span class="edit-payment" onclick="event.stopPropagation(); editarPagamento(${p.id})">✏️</span><span class="delete-payment" onclick="event.stopPropagation(); excluirPagamento(${p.id})">✕</span></span>`;
+        div.appendChild(item);
+    });
+
+    if (temMais) {
+        const btn = document.createElement('button');
+        btn.className = 'ver-mais-btn';
+        btn.textContent = `+ ${pagDia.length - max} mais...`;
+        btn.onclick = e => { e.stopPropagation(); abrirModalDetalhes(dataStr); };
+        div.appendChild(btn);
+    }
+
+    const add = document.createElement('button');
+    add.className = 'add-payment-btn';
+    add.textContent = '+';
+    add.onclick = e => { e.stopPropagation(); abrirModalManual(dataStr); };
+    div.appendChild(add);
+
+    if (pagDia.length > 0) {
+        div.style.borderLeft = '3px solid #667eea';
+        if (pagDia.some(p => p.tipo === 'manual')) div.style.borderLeftColor = '#9b59b6';
+        else if (pagDia.some(p => p.tipo === 'boleto')) div.style.borderLeftColor = '#1a8c8c';
+    }
+
+    div.addEventListener('click', () => {
+        if (pagDia.length > 0) abrirModalDetalhes(dataStr);
+        else abrirModalManual(dataStr);
+    });
+    grid.appendChild(div);
+}
+
+function atualizarTotalMes() {
+    const inicio = new Date(anoAtual, mesAtual, 1);
+    const fim = new Date(anoAtual, mesAtual + 1, 0);
+    let total = 0;
+    pagamentos.forEach(p => {
+        const partes = p.dataVencimento.split('-');
+        const d = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]));
+        d.setHours(0,0,0,0);
+        if (d >= inicio && d <= fim) total += p.valor;
+    });
+    document.getElementById('monthTotal').textContent = `Total do Mês: R$ ${total.toFixed(2)}`;
+}
+
+// =========================== LISTA DE PAGAMENTOS ===========================
+function aplicarFiltros() {
+    filtroFornecedor = document.getElementById('filtroFornecedor').value;
+    filtroDataInicio = document.getElementById('filtroDataInicio').value;
+    filtroDataFim = document.getElementById('filtroDataFim').value;
+    paginaAtual = 1;
+    atualizarListaPagamentos();
+}
+
+function limparFiltros() {
+    document.getElementById('filtroFornecedor').value = '';
+    document.getElementById('filtroDataInicio').value = '';
+    document.getElementById('filtroDataFim').value = '';
+    filtroFornecedor = filtroDataInicio = filtroDataFim = '';
+    paginaAtual = 1;
+    atualizarListaPagamentos();
+}
+
+function atualizarListaPagamentos() {
+    const container = document.getElementById('paymentsList');
+    let filtrados = [...pagamentos];
+    if (filtroAtual === 'pendente') filtrados = filtrados.filter(p => p.status === 'pendente');
+    else if (filtroAtual === 'pago') filtrados = filtrados.filter(p => p.status === 'pago');
+    else if (filtroAtual === 'vencido') filtrados = filtrados.filter(p => p.status === 'vencido');
+    else if (filtroAtual === 'boleto') filtrados = filtrados.filter(p => p.tipo === 'boleto');
+    else if (filtroAtual === 'manual') filtrados = filtrados.filter(p => p.tipo === 'manual');
+
+    if (filtroFornecedor) filtrados = filtrados.filter(p => p.fornecedorId == filtroFornecedor);
+    if (filtroDataInicio) filtrados = filtrados.filter(p => p.dataVencimento >= filtroDataInicio);
+    if (filtroDataFim) filtrados = filtrados.filter(p => p.dataVencimento <= filtroDataFim);
+    filtrados.sort((a,b) => a.dataVencimento.localeCompare(b.dataVencimento));
+
+    const total = filtrados.length;
+    const paginas = Math.ceil(total / ITENS_POR_PAGINA);
+    if (paginaAtual > paginas) paginaAtual = Math.max(1, paginas);
+    if (paginaAtual < 1) paginaAtual = 1;
+    const inicio = (paginaAtual - 1) * ITENS_POR_PAGINA;
+    const fim = Math.min(inicio + ITENS_POR_PAGINA, total);
+    const paginados = filtrados.slice(inicio, fim);
+
+    document.getElementById('prevPageBtn').disabled = paginaAtual <= 1;
+    document.getElementById('nextPageBtn').disabled = paginaAtual >= paginas;
+    document.getElementById('pageInfo').textContent = total > 0 ? `Página ${paginaAtual} de ${paginas} (${total} itens)` : 'Nenhum item';
+
+    if (paginados.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:#999;padding:20px;">Nenhum pagamento encontrado</p>';
+        return;
+    }
+    container.innerHTML = '';
+    paginados.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'payment-card';
+        if (p.tipo === 'boleto') card.classList.add('boleto-payment');
+        if (p.tipo === 'manual') card.classList.add('manual-payment');
+        const statusText = p.status === 'pago' ? '✅ Pago' : p.status === 'vencido' ? '⚠️ Vencido' : '⏳ Pendente';
+        const statusClass = p.status === 'pago' ? 'badge-paid' : p.status === 'vencido' ? 'badge-overdue' : 'badge-pending';
+        let tipoLabel = '';
+        if (p.tipo === 'boleto') tipoLabel = '<span class="badge badge-boleto">🏦 Boleto</span>';
+        if (p.tipo === 'manual') tipoLabel = '<span class="badge badge-manual">📝 Manual</span>';
+        const fornecedorNome = p.fornecedorId ? (fornecedores.find(f => f.id == p.fornecedorId)?.nome || 'N/I') : 'N/I';
+        card.innerHTML = `<div class="payment-info">
+            <span><span class="label">Descrição:</span> ${p.descricao}</span>
+            <span><span class="label">Valor:</span> R$ ${p.valor.toFixed(2)}</span>
+            <span><span class="label">Vencimento:</span> ${formatarData(p.dataVencimento)}</span>
+            <span><span class="label">Fornecedor:</span> ${fornecedorNome}</span>
+            <span><span class="badge ${statusClass}">${statusText}</span></span>
+            ${tipoLabel}
+        </div>
+        <div class="payment-actions">
+            <button class="btn btn-info btn-sm" onclick="editarPagamento(${p.id})">✏️</button>
+            ${p.status !== 'pago' ? `<button class="btn btn-success btn-sm" onclick="marcarComoPago(${p.id})">Pagar</button>` : ''}
+            <button class="btn btn-danger btn-sm" onclick="excluirPagamento(${p.id})">Excluir</button>
+        </div>`;
+        container.appendChild(card);
+    });
+}
+
+function abrirModalDetalhes(dataStr) {
+    const modal = document.getElementById('paymentModal');
+    const body = document.getElementById('modalBody');
+    const pagDia = pagamentos.filter(p => p.dataVencimento === dataStr);
+    body.innerHTML = `
+        <h3>Pagamentos do dia ${formatarData(dataStr)}</h3>
+        <button class="btn btn-purple btn-sm" style="margin-bottom:15px;" onclick="fecharModal();abrirModalManual('${dataStr}');">➕ Manual</button>
+        ${pagDia.map(p => {
+            const fornecedorNome = p.fornecedorId ? (fornecedores.find(f => f.id == p.fornecedorId)?.nome || 'N/I') : 'N/I';
+            let icon = p.tipo === 'boleto' ? '🏦' : p.tipo === 'manual' ? '📝' : '';
+            return `<div style="background:#f8f9fa;padding:10px;margin:10px 0;border-radius:8px;">
+                <div><strong>${p.descricao}</strong> ${icon}</div>
+                <div>Valor: R$ ${p.valor.toFixed(2)}</div>
+                <div>Fornecedor: ${fornecedorNome}</div>
+                <div>Status: ${p.status === 'pago' ? '✅ Pago' : p.status === 'vencido' ? '⚠️ Vencido' : '⏳ Pendente'}</div>
+                <div style="margin-top:8px;">
+                    <button class="btn btn-info btn-sm" onclick="fecharModal();editarPagamento(${p.id})">✏️</button>
+                    ${p.status !== 'pago' ? `<button class="btn btn-success btn-sm" onclick="marcarComoPago(${p.id});fecharModal();">Pagar</button>` : ''}
+                    <button class="btn btn-danger btn-sm" onclick="excluirPagamento(${p.id});fecharModal();">Excluir</button>
+                </div>
+            </div>`;
+        }).join('')}
+    `;
+    modal.classList.add('active');
+}
+
+function fecharModal() { document.getElementById('paymentModal').classList.remove('active'); }
+
+// =========================== ATUALIZAR TUDO ===========================
+function atualizarTudo() {
+    atualizarStatusPagamentos();
+    renderizarCalendario();
+    atualizarListaPagamentos();
+    calcularRankings();
+    atualizarGraficos();
+    carregarFornecedoresSelects();
+    renderizarHistorico();
+    atualizarEstatisticasHistorico();
+}
+
+// =========================== INICIALIZAÇÃO ===========================
+async function init() {
+    const hoje = new Date().toISOString().split('T')[0];
+    document.getElementById('dataCompra').value = hoje;
+
+    // 🔥 Máscara inteligente de datas
+    const campoDatas = document.getElementById('datasVencimento');
+    campoDatas.addEventListener('input', function() {
+        aplicarMascaraDatas(this);
+        atualizarPreviewDatas();
+    });
+    campoDatas.addEventListener('paste', function() {
+        setTimeout(() => {
+            aplicarMascaraDatas(this);
+            atualizarPreviewDatas();
+        }, 10);
+    });
+    campoDatas.addEventListener('keydown', function(e) {
+        // Permite apenas números, backspace, delete, tab, setas
+        const permitidos = ['Backspace','Delete','Tab','ArrowLeft','ArrowRight','Home','End','Enter'];
+        if (permitidos.includes(e.key)) return;
+        if (e.ctrlKey || e.metaKey) return; // Ctrl+C, Ctrl+V, etc.
+        if (!/^\d$/.test(e.key)) {
+            e.preventDefault();
+        }
+    });
+
+    await carregarDadosFirebase();
+
+    if (fornecedores.length === 0) {
+        fornecedores = [
+            { id: 1, nome: 'Fornecedor A' },
+            { id: 2, nome: 'Fornecedor B' },
+            { id: 3, nome: 'Fornecedor C' }
+        ];
+        salvarDados();
+    }
+
+    carregarFornecedoresSelects();
+    atualizarTudo();
+
+    window.addEventListener('click', (e) => {
+        if (e.target === document.getElementById('paymentModal')) fecharModal();
+        if (e.target === document.getElementById('manualPaymentModal')) fecharModalManual();
+        if (e.target === document.getElementById('fornecedorModal')) fecharModalFornecedor();
+    });
+
+    setInterval(atualizarStatusPagamentos, 60000);
+    setInterval(async () => {
+        if (!firebaseCarregado) return;
+        try {
+            await db.collection('sistemas').doc(USUARIO_ID).get();
+        } catch (e) { /* silencioso */ }
+    }, 30000);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

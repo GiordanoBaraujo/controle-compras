@@ -188,6 +188,8 @@
         .sync-status.error { background: #e74c3c; color: #fff; }
         .sync-status.offline { background: #95a5a6; color: #fff; }
 
+        
+
         @media (max-width: 768px) {
             .container { padding: 15px; }
             .calendar-day { min-height: 80px; padding: 4px; }
@@ -250,7 +252,10 @@
                 <select id="fornecedorCompra"><option value="">Selecione</option></select>
             </div>
         </div>
-        <button class="btn" onclick="adicionarCompra()">➕ Adicionar Compra</button>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn" onclick="adicionarCompra()">➕ Adicionar Compra</button>
+            <button class="btn btn-purple" onclick="simularCompra()">🔮 Simular Compra</button>
+        </div>
     </div>
 
     <div class="dashboard-grid">
@@ -399,6 +404,20 @@
         <div id="listaFornecedores" style="margin-top:15px;"></div>
         <div class="modal-actions">
             <button class="btn btn-danger" onclick="fecharModalFornecedor()">Fechar</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal" id="simulacaoModal">
+    <div class="modal-content" style="max-width: 780px;">
+        <div class="modal-header">
+            <h2>🔮 Simulação de Compra</h2>
+            <span class="close-modal" onclick="fecharModalSimulacao()">&times;</span>
+        </div>
+        <div id="simulacaoBody"></div>
+        <div class="modal-actions">
+            <button class="btn btn-danger" onclick="fecharModalSimulacao()">Cancelar</button>
+            <button class="btn btn-success" onclick="confirmarCompraDaSimulacao()">✅ Confirmar e Lançar</button>
         </div>
     </div>
 </div>
@@ -955,18 +974,19 @@ function atualizarGraficos() {
 }
 
 // =========================== ADICIONAR COMPRA ===========================
-function adicionarCompra() {
+// =========================== ADICIONAR COMPRA ===========================
+function coletarDadosCompra() {
     const descricao = document.getElementById('descricao').value.trim();
     const valor = parseFloat(document.getElementById('valor').value);
     const dataCompra = document.getElementById('dataCompra').value;
     const datasInput = document.getElementById('datasVencimento').value.trim();
     const fornecedorId = document.getElementById('fornecedorCompra').value;
 
-    if (!descricao || !valor || !dataCompra || !datasInput) { alert('Preencha todos os campos!'); return; }
-    if (valor <= 0) { alert('Valor deve ser maior que zero!'); return; }
+    if (!descricao || !valor || !dataCompra || !datasInput) { alert('Preencha todos os campos!'); return null; }
+    if (valor <= 0) { alert('Valor deve ser maior que zero!'); return null; }
 
     const partes = dividirDatas(datasInput);
-    if (partes.length === 0) { alert('Informe pelo menos uma data de vencimento!'); return; }
+    if (partes.length === 0) { alert('Informe pelo menos uma data de vencimento!'); return null; }
 
     const datasValidas = [];
     const invalidas = [];
@@ -978,7 +998,7 @@ function adicionarCompra() {
 
     if (invalidas.length > 0) {
         alert(`Data(s) não reconhecida(s):\n\n${invalidas.join('\n')}\n\nDigite apenas os números: ddmmaa (ex: 150126).`);
-        return;
+        return null;
     }
 
     datasValidas.sort((a, b) => a.localeCompare(b));
@@ -991,6 +1011,12 @@ function adicionarCompra() {
         total += v;
         return { data, v };
     });
+
+    return { descricao, valor, dataCompra, datasValidas, fornecedorId, parcelas };
+}
+
+function efetivarCompra(dados) {
+    const { descricao, valor, dataCompra, datasValidas, fornecedorId, parcelas } = dados;
 
     const compra = { id: Date.now(), descricao, valor, dataCompra, datasVencimento: datasValidas, fornecedorId: fornecedorId || null, createdAt: new Date().toISOString() };
     compras.push(compra);
@@ -1013,9 +1039,166 @@ function adicionarCompra() {
     });
 
     salvarDados();
-    limparFormulario();
     atualizarTudo();
-    alert(`✅ Compra adicionada! ${parcelas.length} parcela(s) criada(s).`);
+}
+
+function adicionarCompra() {
+    const dados = coletarDadosCompra();
+    if (!dados) return;
+    efetivarCompra(dados);
+    limparFormulario();
+    alert(`✅ Compra adicionada! ${dados.parcelas.length} parcela(s) criada(s).`);
+}
+
+// =========================== SIMULAÇÃO DE COMPRA ===========================
+let simulacaoAtual = null;
+
+function calcularTotalMesEspecifico(ano, mes) {
+    const inicio = new Date(ano, mes - 1, 1);
+    const fim = new Date(ano, mes, 0);
+    inicio.setHours(0,0,0,0);
+    fim.setHours(23,59,59,999);
+    let total = 0;
+    pagamentos.forEach(p => {
+        const partes = p.dataVencimento.split('-');
+        const d = new Date(parseInt(partes[0]), parseInt(partes[1]) - 1, parseInt(partes[2]));
+        d.setHours(0,0,0,0);
+        if (d >= inicio && d <= fim) total += p.valor;
+    });
+    return total;
+}
+
+function simularCompra() {
+    const dados = coletarDadosCompra();
+    if (!dados) return;
+
+    const { descricao, valor, parcelas, fornecedorId } = dados;
+    const fornecedorNome = fornecedorId ? (fornecedores.find(f => f.id == fornecedorId)?.nome || 'N/I') : 'Nenhum';
+
+    // Agrupa parcelas por mês (YYYY-MM)
+    const porMes = {};
+    parcelas.forEach(p => {
+        const chave = p.data.substring(0, 7);
+        if (!porMes[chave]) porMes[chave] = { parcelas: [], novo: 0, atual: 0 };
+        porMes[chave].parcelas.push(p);
+        porMes[chave].novo += p.v;
+    });
+
+    const chaves = Object.keys(porMes).sort();
+    chaves.forEach(chave => {
+        const [ano, mes] = chave.split('-').map(Number);
+        porMes[chave].atual = calcularTotalMesEspecifico(ano, mes);
+    });
+
+    const mesesNome = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+    let totalAtualAfetado = 0;
+    let totalNovoAfetado = 0;
+    let mesMaisPesado = null;
+    let valorMesMaisPesado = 0;
+
+    chaves.forEach(chave => {
+        const info = porMes[chave];
+        const novo = info.atual + info.novo;
+        totalAtualAfetado += info.atual;
+        totalNovoAfetado += novo;
+        if (novo > valorMesMaisPesado) {
+            valorMesMaisPesado = novo;
+            mesMaisPesado = chave;
+        }
+    });
+
+    // Cabeçalho resumo
+    let html = `
+        <div class="info-box" style="background:#f3e8ff; border-left-color:#9b59b6;">
+            <p><strong>📝 ${descricao}</strong></p>
+            <p>Valor Total: <strong>R$ ${valor.toFixed(2)}</strong> em <strong>${parcelas.length}</strong> parcela(s)</p>
+            <p>Fornecedor: <strong>${fornecedorNome}</strong></p>
+        </div>
+        <h3 style="color:#333; margin-bottom:10px;">📊 Impacto no Valor Mensal</h3>
+        <p style="color:#666; font-size:13px; margin-bottom:12px;">Veja como ficaria o total de cada mês caso você confirme esta compra:</p>
+        <div class="scroll-table" style="max-height:400px;">
+        <table class="tabela-mensal">
+            <thead>
+                <tr>
+                    <th>Mês</th>
+                    <th style="text-align:center;">Parcelas</th>
+                    <th style="text-align:right;">Valor Atual</th>
+                    <th style="text-align:right;">+ Esta Compra</th>
+                    <th style="text-align:right;">Novo Total</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    chaves.forEach(chave => {
+        const [ano, mes] = chave.split('-');
+        const label = `${mesesNome[parseInt(mes) - 1]} ${ano}`;
+        const info = porMes[chave];
+        const novoTotal = info.atual + info.novo;
+
+        html += `<tr>
+            <td class="mes">${label}</td>
+            <td class="qtd">${info.parcelas.length}</td>
+            <td style="text-align:right;">R$ ${info.atual.toFixed(2)}</td>
+            <td style="text-align:right; color:#9b59b6; font-weight:600;">+ R$ ${info.novo.toFixed(2)}</td>
+            <td style="text-align:right; font-weight:700; color:#e74c3c;">R$ ${novoTotal.toFixed(2)}</td>
+        </tr>`;
+
+        info.parcelas.forEach(p => {
+            html += `<tr style="background:#fafbff; font-size:12px; color:#777;">
+                <td style="padding-left:30px;">↳ ${formatarData(p.data)}</td>
+                <td></td><td></td><td></td>
+                <td style="text-align:right;">R$ ${p.v.toFixed(2)}</td>
+            </tr>`;
+        });
+    });
+
+    html += `</tbody>
+        <tfoot>
+            <tr style="background:#667eea; color:#fff; font-weight:700;">
+                <td colspan="2">💰 TOTAL DOS MESES AFETADOS</td>
+                <td style="text-align:right;">R$ ${totalAtualAfetado.toFixed(2)}</td>
+                <td style="text-align:right;">+ R$ ${valor.toFixed(2)}</td>
+                <td style="text-align:right;">R$ ${totalNovoAfetado.toFixed(2)}</td>
+            </tr>
+        </tfoot>
+    </table>
+    </div>`;
+
+    // Aviso do mês mais pesado
+    if (mesMaisPesado) {
+        const [a, m] = mesMaisPesado.split('-');
+        const labelPesado = `${mesesNome[parseInt(m) - 1]} ${a}`;
+        html += `
+        <div style="margin-top:15px; padding:12px 15px; background:#fff3cd; border-left:4px solid #f39c12; border-radius:8px;">
+            <strong>⚠️ Mês mais impactado:</strong> ${labelPesado} — ficará com total de <strong>R$ ${valorMesMaisPesado.toFixed(2)}</strong>.
+        </div>`;
+    }
+
+    html += `
+    <p style="font-size:12px; color:#888; margin-top:15px;">
+        ℹ️ O "Valor Atual" considera <strong>todos os lançamentos</strong> (pagos, pendentes e vencidos) já registrados no mês. Ao confirmar, esta compra será adicionada ao sistema.
+    </p>`;
+
+    document.getElementById('simulacaoBody').innerHTML = html;
+    document.getElementById('simulacaoModal').classList.add('active');
+    simulacaoAtual = dados;
+}
+
+function confirmarCompraDaSimulacao() {
+    if (!simulacaoAtual) return;
+    const dados = simulacaoAtual;
+    simulacaoAtual = null;
+    efetivarCompra(dados);
+    fecharModalSimulacao();
+    limparFormulario();
+    alert(`✅ Compra adicionada! ${dados.parcelas.length} parcela(s) criada(s).`);
+}
+
+function fecharModalSimulacao() {
+    document.getElementById('simulacaoModal').classList.remove('active');
+    simulacaoAtual = null;
 }
 
 // =========================== SALVAR PAGAMENTO MANUAL ===========================
@@ -1450,6 +1633,7 @@ async function init() {
         if (e.target === document.getElementById('paymentModal')) fecharModal();
         if (e.target === document.getElementById('manualPaymentModal')) fecharModalManual();
         if (e.target === document.getElementById('fornecedorModal')) fecharModalFornecedor();
+        if (e.target === document.getElementById('simulacaoModal')) fecharModalSimulacao(); // ← adicione
     });
 
     setInterval(atualizarStatusPagamentos, 60000);
